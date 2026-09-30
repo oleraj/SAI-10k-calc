@@ -253,6 +253,7 @@ get_partial_SEQ <- function(transcript,consensusStart,consensusEnd,
   # correct the start site, from ucsc table format
   consensusStart = consensusStart+1
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE)
+  if (nrow(consensusTable) == 0) return("cannot determine")
   # pull out the CDS start and stop
   cdsStartPos = as.integer(consensusTable$cdsStart[[1]])+1
   cdsEndPos = as.integer(consensusTable$cdsEnd[[1]])
@@ -355,6 +356,7 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt)
     return("lost site/s do not match consensus")
   }
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD=FALSE)
+  if (nrow(consensusTable) == 0) return("cannot determine")
   skipTable = consensusTable
   exonsList = purrr::flatten(str_split(exons, ","))
   exonsList = as.numeric(exonsList)
@@ -376,6 +378,7 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt)
   skipTable = skipTable %>% filter(., !eNum %in% exonsList) %>%
     filter(., eFrame != -1)
   consensusTable = consensusTable %>% filter(., eFrame != -1)
+  if (nrow(consensusTable) == 0) return("cannot determine")
   minExon = min(exonsList)-1
   strand = consensusTable$strand[[1]]
   if (strand == -1) {
@@ -405,6 +408,7 @@ get_pseudo_SEQ <- function(pseudoStart,pseudoEnd,refseqTable,frameshift,
     return("gain site/s not intronic")
   }
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE)
+  if (nrow(consensusTable) == 0) return("cannot determine")
   pseudoTable = consensusTable
   strand = consensusTable$strand[[1]]
   currentChr = pseudoTable$chrom[[1]]
@@ -451,6 +455,7 @@ get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,re
     return("lost site/s do not match consensus")
   }
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE)
+  if (nrow(consensusTable) == 0) return("cannot determine")
   retentionTable = consensusTable
   strand = consensusTable$strand[[1]]
   # pull out the CDS start and stop
@@ -507,6 +512,7 @@ get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,re
 get_exon_inclusion_seq <- function(refseqTable,exon,transcript,frameshift,varPos,ref,alt) {
   # extract the consensus exon table
   consensusTAB = make_consensus_table(transcript,refseqTable,filterNONCOD=TRUE)
+  if (nrow(consensusTAB) == 0) return("cannot determine")
   inclusionTAB = consensusTAB
   strand = inclusionTAB$strand[[1]]
   # pull at the CDS positions
@@ -619,7 +625,7 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
     if (reverseDiff < 3) {
       alteredAAseq <- subseq(alteredAAseq,1,6)
     } else {
-      alteredAAseq <- subseq(alteredAAseq,1,reverseDiff+3)
+      alteredAAseq <- subseq(alteredAAseq,1,min(reverseDiff+3,length(alteredAAseq)))
     }
   }
   # for inframe sequences with a net gain of amino acids
@@ -656,8 +662,8 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
       if (reverseDiff < 3) {
         alteredAAseq <- subseq(alteredAAseq,1,6)
       } else {
-        alteredAAseq <- subseq(alteredAAseq,1,reverseDiff+3)
-      }      
+        alteredAAseq <- subseq(alteredAAseq,1,min(reverseDiff+3,length(alteredAAseq)))
+      }
     }
   }
   # now check for whether a stop has been introduced
