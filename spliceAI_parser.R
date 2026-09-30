@@ -559,9 +559,16 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
   altTable <- altTable %>% filter(eStartAdj <= eEnd)
   consensusTab <- consensusTab %>% filter(eStartAdj <= eEnd)
   if (nrow(altTable) == 0 | nrow(consensusTab) == 0) return("cannot determine")
-  # get the DNA sequences
-  alteredExonDNAseqs <- getSeq(Hsapiens,paste0("chr",altTable$chrom),start=altTable$eStartAdj,end=altTable$eEnd)
-  consensusExonDNAseqs <- getSeq(Hsapiens,paste0("chr",consensusTab$chrom),start=consensusTab$eStartAdj,end=consensusTab$eEnd)
+  # get the DNA sequences; guard against coordinates that exceed chromosome length
+  seqs <- tryCatch({
+    list(
+      alt  = getSeq(Hsapiens,paste0("chr",altTable$chrom),  start=altTable$eStartAdj,  end=altTable$eEnd),
+      cons = getSeq(Hsapiens,paste0("chr",consensusTab$chrom),start=consensusTab$eStartAdj,end=consensusTab$eEnd)
+    )
+  }, error = function(e) NULL)
+  if (is.null(seqs)) return("cannot determine")
+  alteredExonDNAseqs   <- seqs$alt
+  consensusExonDNAseqs <- seqs$cons
   # make necessary adjustments for the variant itself
   # also check whether the reference is correct
   genomeRef = as.character(getSeq(Hsapiens,paste0("chr",currentChr),varPos,varPos))
