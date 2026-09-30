@@ -555,6 +555,10 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
   currentChr = consensusTab$chrom[[1]]
   consensusTab <- consensusTab %>% ungroup() %>%
     dplyr::slice(., ((minKeepExonRow):n()))  
+  # remove exons with non-positive width that can arise after CDS boundary clamping
+  altTable <- altTable %>% filter(eStartAdj <= eEnd)
+  consensusTab <- consensusTab %>% filter(eStartAdj <= eEnd)
+  if (nrow(altTable) == 0 | nrow(consensusTab) == 0) return("cannot determine")
   # get the DNA sequences
   alteredExonDNAseqs <- getSeq(Hsapiens,paste0("chr",altTable$chrom),start=altTable$eStartAdj,end=altTable$eEnd)
   consensusExonDNAseqs <- getSeq(Hsapiens,paste0("chr",consensusTab$chrom),start=consensusTab$eStartAdj,end=consensusTab$eEnd)
@@ -637,11 +641,11 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
     if (length(uniqchars) == 1) {
       # get just the altered aa, and compare to the next consensus
       alteredseqcheck = substring(alteredseqcheck,1,1)
-      consensusseqcheck = substring(consensusAAseq,(forwardDiff-1),(forwardDiff-1))      
+      consensusseqcheck = substring(consensusAAseq,max(1,forwardDiff-1),max(1,forwardDiff-1))
     } else {
       # otherwise compare whole inserted sequence
       # also account for addition to sequence longer than consensus sequence
-      startpos = forwardDiff-1
+      startpos = max(1, forwardDiff-1)
       endpos = forwardDiff-1+difflength-1
       if (endpos > length(consensusAAseq)) {
         consensusseqcheck = substring(consensusAAseq,startpos,length(consensusAAseq))
