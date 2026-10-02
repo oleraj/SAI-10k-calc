@@ -261,7 +261,11 @@ get_partial_SEQ <- function(transcript,consensusStart,consensusEnd,
   # correct the start site, from ucsc table format
   consensusStart = consensusStart+1
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE,selChrom = chrom)
-  if (nrow(consensusTable) == 0) return("cannot determine")
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   # pull out the CDS start and stop
   cdsStartPos = as.integer(consensusTable$cdsStart[[1]])+1
   cdsEndPos = as.integer(consensusTable$cdsEnd[[1]])
@@ -364,7 +368,11 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt,
     return("lost site/s do not match consensus")
   }
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD=FALSE,selChrom = chrom)
-  if (nrow(consensusTable) == 0) return("cannot determine")
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   skipTable = consensusTable
   exonsList = purrr::flatten(str_split(exons, ","))
   exonsList = as.numeric(exonsList)
@@ -386,7 +394,11 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt,
   skipTable = skipTable %>% filter(., !eNum %in% exonsList) %>%
     filter(., eFrame != -1)
   consensusTable = consensusTable %>% filter(., eFrame != -1)
-  if (nrow(consensusTable) == 0) return("cannot determine")
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   minExon = min(exonsList)-1
   strand = consensusTable$strand[[1]]
   if (strand == -1) {
@@ -416,7 +428,11 @@ get_pseudo_SEQ <- function(pseudoStart,pseudoEnd,refseqTable,frameshift,
     return("gain site/s not intronic")
   }
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE,selChrom = chrom)
-  if (nrow(consensusTable) == 0) return("cannot determine")
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   pseudoTable = consensusTable
   strand = consensusTable$strand[[1]]
   currentChr = pseudoTable$chrom[[1]]
@@ -463,7 +479,11 @@ get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,re
     return("lost site/s do not match consensus")
   }
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE,selChrom = chrom)
-  if (nrow(consensusTable) == 0) return("cannot determine")
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   retentionTable = consensusTable
   strand = consensusTable$strand[[1]]
   # pull out the CDS start and stop
@@ -520,7 +540,11 @@ get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,re
 get_exon_inclusion_seq <- function(refseqTable,exon,transcript,frameshift,varPos,ref,alt,chrom=NULL) {
   # extract the consensus exon table
   consensusTAB = make_consensus_table(transcript,refseqTable,filterNONCOD=TRUE,selChrom = chrom)
-  if (nrow(consensusTAB) == 0) return("cannot determine")
+  if (nrow(consensusTAB) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   inclusionTAB = consensusTAB
   strand = inclusionTAB$strand[[1]]
   # pull at the CDS positions
@@ -564,16 +588,30 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
   consensusTab <- consensusTab %>% ungroup() %>%
     dplyr::slice(., ((minKeepExonRow):n()))  
   # remove exons with non-positive width that can arise after CDS boundary clamping
+  nNegWidth <- sum(altTable$eStartAdj > altTable$eEnd, na.rm = TRUE) +
+    sum(consensusTab$eStartAdj > consensusTab$eEnd, na.rm = TRUE)
+  if (nNegWidth > 0) {
+    warning(sprintf("determine_aaSEQ: dropped %d exon row(s) with negative width (eStartAdj > eEnd) on chr%s near pos %s; check for a cross-chromosome/PAR transcript or CDS-boundary clamping",
+                    nNegWidth, currentChr, varPos))
+  }
   altTable <- altTable %>% filter(eStartAdj <= eEnd)
   consensusTab <- consensusTab %>% filter(eStartAdj <= eEnd)
-  if (nrow(altTable) == 0 | nrow(consensusTab) == 0) return("cannot determine")
+  if (nrow(altTable) == 0 | nrow(consensusTab) == 0) {
+    warning(sprintf("determine_aaSEQ: all exon rows had negative width on chr%s near pos %s; returning 'cannot determine'",
+                    currentChr, varPos))
+    return("cannot determine")
+  }
   # get the DNA sequences; guard against coordinates that exceed chromosome length
   seqs <- tryCatch({
     list(
       alt  = getSeq(Hsapiens,paste0("chr",altTable$chrom),  start=altTable$eStartAdj,  end=altTable$eEnd),
       cons = getSeq(Hsapiens,paste0("chr",consensusTab$chrom),start=consensusTab$eStartAdj,end=consensusTab$eEnd)
     )
-  }, error = function(e) NULL)
+  }, error = function(e) {
+    warning(sprintf("determine_aaSEQ: exon getSeq failed on chr%s near pos %s (%s); returning 'cannot determine' — check coordinates/chromosome (e.g. cross-chromosome/PAR transcript or unknown contig)",
+                    currentChr, varPos, conditionMessage(e)))
+    NULL
+  })
   if (is.null(seqs)) return("cannot determine")
   alteredExonDNAseqs   <- seqs$alt
   consensusExonDNAseqs <- seqs$cons
@@ -583,7 +621,11 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
   # out-of-bounds coordinate error as the exon getSeq calls above)
   genomeRef = tryCatch(
     as.character(getSeq(Hsapiens,paste0("chr",currentChr),varPos,varPos)),
-    error = function(e) NULL)
+    error = function(e) {
+      warning(sprintf("determine_aaSEQ: reference getSeq failed at chr%s:%s (%s); returning 'cannot determine'",
+                      currentChr, varPos, conditionMessage(e)))
+      NULL
+    })
   if (is.null(genomeRef)) return("cannot determine")
   adjustedExonDNAseq = add_variant(ref = ref,
                                    alt = alt,
