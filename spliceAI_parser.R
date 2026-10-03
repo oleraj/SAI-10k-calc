@@ -908,6 +908,29 @@ cat("\nPerforming calculations\n")
 
 # Depending on how SpliceAI was run (default or with supplied transcripts)
 # the transcript table will be matched accordingly
+
+# Guard: if no SNVs with SpliceAI scores remain (e.g. an all-indel chunk), the
+# SNV interpretation below cannot run -- input_splice_annot$SYMBOL[1] is NA (which
+# aborts the str_detect() just below), and the per-transcript helpers further down
+# are invoked with an empty transcript and error. Emit the non-SNV/unscored
+# variants (input_splice_other) with empty interpretation columns instead of crashing.
+if(nrow(input_splice_annot) == 0){
+  warning(sprintf(paste0("No SNV variants with SpliceAI scores in this input; ",
+                         "emitting %d non-SNV/unscored variant(s) without splice ",
+                         "interpretation."), nrow(input_splice_other)))
+  .annot_cols <- c("name","strand","Any_splicing_aberration","bp_5prime","bp_3prime",
+                   "Partial_intron_retention","Partial_exon_deletion","Partial_exon_start",
+                   "Partial_exon_end","Partial_frameshift","Partial_intron_retention_aaseq",
+                   "Partial_exon_deletion_aaseq","Gained_exon_size","Pseudoexon_activation",
+                   "Pseudoexon_start","Pseudoexon_end","Pseudoexon_frameshift","Pseudoexon_intron",
+                   "Pseudoexon_activation_aaseq","Increased_exon_inclusion",
+                   "Exon_with_increased_inclusion","Increased_exon_inclusion_aaseq",
+                   "Exon_skipping","Lost_exons","Exon_skipping_frameshift","Exon_skipping_aaseq",
+                   "Retained_intron_size","Intron_retention","Retained_intron",
+                   "Intron_retention_frameshift","Intron_retention_aaseq")
+  output_all <- input_splice_other
+  for(.c in .annot_cols) if(!.c %in% names(output_all)) output_all[[.c]] <- NA
+} else {
 if(str_detect(input_splice_annot$SYMBOL[1],"^RefSeqTx-")){
   refseq_boundaries <- refseq_boundaries %>%
     mutate(chrom = str_remove(chrom,"chr")) %>% # REMOVE
@@ -1278,8 +1301,9 @@ output <- output %>%
 cat("\nWriting output\n")
 
 ## Save output
-output_all <- output %>% 
+output_all <- output %>%
   bind_rows(input_splice_other)
+}  # end: SNV interpretation branch (nrow(input_splice_annot) > 0)
 
 # Drop columns from output
 if (include == TRUE) {
