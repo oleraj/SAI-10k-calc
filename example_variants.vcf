@@ -1,5 +1,5 @@
 ##fileformat=VCFv4.1
-##FILTER=<ID=PASS,Description=""All filters passed"">
+##FILTER=<ID=PASS,Description="All filters passed">
 ##contig=<ID=1,length=249250621,assembly=b37>
 ##reference=file:///path/to/human_g1k_v37.fasta
 ##contig=<ID=13>

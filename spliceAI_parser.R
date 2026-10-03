@@ -159,11 +159,19 @@ find_difference_point <- function(seqA,seqB,direction) {
 
 
 # Format the refseq transcript, exon table
-make_consensus_table <- function(transcript,refseqTab,filterNONCOD=TRUE) {
+make_consensus_table <- function(transcript,refseqTab,filterNONCOD=TRUE,selChrom=NULL) {
   # Extract the single transcript
   transcriptTab <- refseqTab %>%
     ungroup %>%
     filter(., `name` == transcript)
+  # Pseudoautosomal (PAR) transcripts (e.g. NM_002186.3/IL9R) appear in the
+  # RefSeq table on both chrX and chrY under the same name. Keep only the copy
+  # on the variant's chromosome, otherwise both copies' exons are combined and
+  # getSeq is handed coordinates that run off the other chromosome.
+  if (!is.null(selChrom)) {
+    transcriptTab <- transcriptTab %>%
+      filter(., chrom == selChrom)
+  }
   # now correct for the zero UCSC positioning
   transcriptTab <- transcriptTab %>%
     mutate(eStartAdj = case_when(is.na(eStart) ~ NA_integer_,
@@ -249,10 +257,15 @@ find_exon_lost_gain <- function(transcript,DLDGposition,ALAGposition,refseqTab) 
 # Extract the changed amino acid sequence for partial's
 get_partial_SEQ <- function(transcript,consensusStart,consensusEnd,
                             partialStart,partialEnd,refseqTable,
-                            frameshift,varPos,ref,alt) {
+                            frameshift,varPos,ref,alt,chrom=NULL) {
   # correct the start site, from ucsc table format
   consensusStart = consensusStart+1
-  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE)
+  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE,selChrom = chrom)
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   # pull out the CDS start and stop
   cdsStartPos = as.integer(consensusTable$cdsStart[[1]])+1
   cdsEndPos = as.integer(consensusTable$cdsEnd[[1]])
@@ -350,11 +363,16 @@ get_partial_SEQ <- function(transcript,consensusStart,consensusEnd,
 
 
 # Extract the changed amino acid sequence for exon skipping
-get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt){
+get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt,chrom=NULL){
   if (is.na(exons)) {
     return("lost site/s do not match consensus")
   }
-  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD=FALSE)
+  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD=FALSE,selChrom = chrom)
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   skipTable = consensusTable
   exonsList = purrr::flatten(str_split(exons, ","))
   exonsList = as.numeric(exonsList)
@@ -376,6 +394,11 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt)
   skipTable = skipTable %>% filter(., !eNum %in% exonsList) %>%
     filter(., eFrame != -1)
   consensusTable = consensusTable %>% filter(., eFrame != -1)
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   minExon = min(exonsList)-1
   strand = consensusTable$strand[[1]]
   if (strand == -1) {
@@ -400,11 +423,16 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt)
 
 # Format the refseq table to reflect the pseudoexon activation impact
 get_pseudo_SEQ <- function(pseudoStart,pseudoEnd,refseqTable,frameshift,
-                           transcript,varPos,ref,alt) {
+                           transcript,varPos,ref,alt,chrom=NULL) {
   if (is.na(pseudoStart) | is.na(pseudoEnd)) {
     return("gain site/s not intronic")
   }
-  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE)
+  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE,selChrom = chrom)
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   pseudoTable = consensusTable
   strand = consensusTable$strand[[1]]
   currentChr = pseudoTable$chrom[[1]]
@@ -446,11 +474,16 @@ get_pseudo_SEQ <- function(pseudoStart,pseudoEnd,refseqTable,frameshift,
 
 
 # Format the refseq table to reflect the intron retention impact
-get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,ref,alt) {
+get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,ref,alt,chrom=NULL) {
   if (is.na(intron)) {
     return("lost site/s do not match consensus")
   }
-  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE)
+  consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE,selChrom = chrom)
+  if (nrow(consensusTable) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   retentionTable = consensusTable
   strand = consensusTable$strand[[1]]
   # pull out the CDS start and stop
@@ -504,9 +537,14 @@ get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,re
 
 
 # Extract the amino acid sequence for the relevant increased exon inclusion
-get_exon_inclusion_seq <- function(refseqTable,exon,transcript,frameshift,varPos,ref,alt) {
+get_exon_inclusion_seq <- function(refseqTable,exon,transcript,frameshift,varPos,ref,alt,chrom=NULL) {
   # extract the consensus exon table
-  consensusTAB = make_consensus_table(transcript,refseqTable,filterNONCOD=TRUE)
+  consensusTAB = make_consensus_table(transcript,refseqTable,filterNONCOD=TRUE,selChrom = chrom)
+  if (nrow(consensusTAB) == 0) {
+    warning(sprintf("spliceAI_parser: no coding exons for transcript %s%s; returning 'cannot determine'",
+                    transcript, if (grepl("^(NR_|XR_)", transcript)) " (non-coding RefSeq transcript)" else ""))
+    return("cannot determine")
+  }
   inclusionTAB = consensusTAB
   strand = inclusionTAB$strand[[1]]
   # pull at the CDS positions
@@ -549,12 +587,46 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
   currentChr = consensusTab$chrom[[1]]
   consensusTab <- consensusTab %>% ungroup() %>%
     dplyr::slice(., ((minKeepExonRow):n()))  
-  # get the DNA sequences
-  alteredExonDNAseqs <- getSeq(Hsapiens,paste0("chr",altTable$chrom),start=altTable$eStartAdj,end=altTable$eEnd)
-  consensusExonDNAseqs <- getSeq(Hsapiens,paste0("chr",consensusTab$chrom),start=consensusTab$eStartAdj,end=consensusTab$eEnd)
+  # remove exons with non-positive width that can arise after CDS boundary clamping
+  nNegWidth <- sum(altTable$eStartAdj > altTable$eEnd, na.rm = TRUE) +
+    sum(consensusTab$eStartAdj > consensusTab$eEnd, na.rm = TRUE)
+  if (nNegWidth > 0) {
+    warning(sprintf("determine_aaSEQ: dropped %d exon row(s) with negative width (eStartAdj > eEnd) on chr%s near pos %s; check for a cross-chromosome/PAR transcript or CDS-boundary clamping",
+                    nNegWidth, currentChr, varPos))
+  }
+  altTable <- altTable %>% filter(eStartAdj <= eEnd)
+  consensusTab <- consensusTab %>% filter(eStartAdj <= eEnd)
+  if (nrow(altTable) == 0 | nrow(consensusTab) == 0) {
+    warning(sprintf("determine_aaSEQ: all exon rows had negative width on chr%s near pos %s; returning 'cannot determine'",
+                    currentChr, varPos))
+    return("cannot determine")
+  }
+  # get the DNA sequences; guard against coordinates that exceed chromosome length
+  seqs <- tryCatch({
+    list(
+      alt  = getSeq(Hsapiens,paste0("chr",altTable$chrom),  start=altTable$eStartAdj,  end=altTable$eEnd),
+      cons = getSeq(Hsapiens,paste0("chr",consensusTab$chrom),start=consensusTab$eStartAdj,end=consensusTab$eEnd)
+    )
+  }, error = function(e) {
+    warning(sprintf("determine_aaSEQ: exon getSeq failed on chr%s near pos %s (%s); returning 'cannot determine' — check coordinates/chromosome (e.g. cross-chromosome/PAR transcript or unknown contig)",
+                    currentChr, varPos, conditionMessage(e)))
+    NULL
+  })
+  if (is.null(seqs)) return("cannot determine")
+  alteredExonDNAseqs   <- seqs$alt
+  consensusExonDNAseqs <- seqs$cons
   # make necessary adjustments for the variant itself
   # also check whether the reference is correct
-  genomeRef = as.character(getSeq(Hsapiens,paste0("chr",currentChr),varPos,varPos))
+  # guard against varPos/chrom that exceed chromosome length (same class of
+  # out-of-bounds coordinate error as the exon getSeq calls above)
+  genomeRef = tryCatch(
+    as.character(getSeq(Hsapiens,paste0("chr",currentChr),varPos,varPos)),
+    error = function(e) {
+      warning(sprintf("determine_aaSEQ: reference getSeq failed at chr%s:%s (%s); returning 'cannot determine'",
+                      currentChr, varPos, conditionMessage(e)))
+      NULL
+    })
+  if (is.null(genomeRef)) return("cannot determine")
   adjustedExonDNAseq = add_variant(ref = ref,
                                    alt = alt,
                                    varPos = varPos,
@@ -619,7 +691,7 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
     if (reverseDiff < 3) {
       alteredAAseq <- subseq(alteredAAseq,1,6)
     } else {
-      alteredAAseq <- subseq(alteredAAseq,1,reverseDiff+3)
+      alteredAAseq <- subseq(alteredAAseq,1,min(reverseDiff+3,length(alteredAAseq)))
     }
   }
   # for inframe sequences with a net gain of amino acids
@@ -631,11 +703,11 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
     if (length(uniqchars) == 1) {
       # get just the altered aa, and compare to the next consensus
       alteredseqcheck = substring(alteredseqcheck,1,1)
-      consensusseqcheck = substring(consensusAAseq,(forwardDiff-1),(forwardDiff-1))      
+      consensusseqcheck = substring(consensusAAseq,max(1,forwardDiff-1),max(1,forwardDiff-1))
     } else {
       # otherwise compare whole inserted sequence
       # also account for addition to sequence longer than consensus sequence
-      startpos = forwardDiff-1
+      startpos = max(1, forwardDiff-1)
       endpos = forwardDiff-1+difflength-1
       if (endpos > length(consensusAAseq)) {
         consensusseqcheck = substring(consensusAAseq,startpos,length(consensusAAseq))
@@ -656,8 +728,8 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
       if (reverseDiff < 3) {
         alteredAAseq <- subseq(alteredAAseq,1,6)
       } else {
-        alteredAAseq <- subseq(alteredAAseq,1,reverseDiff+3)
-      }      
+        alteredAAseq <- subseq(alteredAAseq,1,min(reverseDiff+3,length(alteredAAseq)))
+      }
     }
   }
   # now check for whether a stop has been introduced
@@ -1118,7 +1190,8 @@ output <- output %>%
                                                                  frameshift = Partial_frameshift,
                                                                  varPos = POS,
                                                                  ref = REF,
-                                                                 alt = ALT),"-"))
+                                                                 alt = ALT,
+                                                                 chrom = `#CHROM`),"-"))
 # for partial exon deletion
 output <- output %>%
   rowwise() %>%
@@ -1132,7 +1205,8 @@ output <- output %>%
                                                               frameshift = Partial_frameshift,
                                                               varPos = POS,
                                                               ref = REF,
-                                                              alt = ALT),"-"))
+                                                              alt = ALT,
+                                                              chrom = `#CHROM`),"-"))
 # for (multi)exon skipping
 output <- output %>%
   rowwise() %>%
@@ -1143,7 +1217,8 @@ output <- output %>%
                                                    frameshift = Exon_skipping_frameshift,
                                                    varPos = POS,
                                                    ref = REF,
-                                                   alt = ALT),"-"))
+                                                   alt = ALT,
+                                                   chrom = `#CHROM`),"-"))
 # for pseudoexon activation
 output <- output %>%
   rowwise() %>%
@@ -1155,7 +1230,8 @@ output <- output %>%
                                                              transcript = name,
                                                              varPos = POS,
                                                              ref = REF,
-                                                             alt = ALT),"-"))
+                                                             alt = ALT,
+                                                             chrom = `#CHROM`),"-"))
 # for intron retention
 output <- output %>%
   rowwise() %>%
@@ -1166,7 +1242,8 @@ output <- output %>%
                                                            frameshift = Intron_retention_frameshift,
                                                            varPos = POS,
                                                            ref = REF,
-                                                           alt = ALT),"-"))
+                                                           alt = ALT,
+                                                           chrom = `#CHROM`),"-"))
 
 # for increased exon inclusion
 output <- output %>%
@@ -1178,7 +1255,8 @@ output <- output %>%
                                                            varPos = POS,
                                                            ref = REF,
                                                            alt = ALT,
-                                                           exon = Exon_with_increased_inclusion),"-"))
+                                                           exon = Exon_with_increased_inclusion,
+                                                           chrom = `#CHROM`),"-"))
 
 # clean up the partial frameshift column
 output <- output %>%
