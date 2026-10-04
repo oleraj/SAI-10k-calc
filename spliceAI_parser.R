@@ -405,6 +405,15 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt,
     skipTable = skipTable %>% arrange(., desc(eStartAdj))
   }
   rowNumber = which(skipTable$eNum==as.integer(minExon))
+  # Guard: the immediate-upstream exon (minExon) may not be in skipTable (e.g. the first
+  # coding exon is skipped so minExon=0, or it was a non-coding exon already removed). Without
+  # this, `slice(rowNumber:n())` below fails with "argument of length 0" (cf. the same guard in
+  # the partial-deletion helper above).
+  if (is_empty(rowNumber)) {
+    warning(sprintf("spliceAI_parser: get_skip_SEQ could not locate upstream exon %s for transcript %s; returning 'cannot determine'",
+                    minExon, transcript))
+    return("cannot determine")
+  }
   # correct for CDS positioning in both tables
   skipTable <- skipTable %>%
     mutate(eStartAdj = ifelse(eStartAdj <= cdsstart, cdsstart, eStartAdj),
@@ -689,7 +698,7 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
       return("no difference in protein sequence")
     }
     if (reverseDiff < 3) {
-      alteredAAseq <- subseq(alteredAAseq,1,6)
+      alteredAAseq <- subseq(alteredAAseq,1,min(6,length(alteredAAseq)))
     } else {
       alteredAAseq <- subseq(alteredAAseq,1,min(reverseDiff+3,length(alteredAAseq)))
     }
@@ -726,7 +735,7 @@ determine_aaSEQ <- function(altTable,consensusTab,frameshift,varPos,ref,alt) {
         return("no difference in protein sequence")
       }
       if (reverseDiff < 3) {
-        alteredAAseq <- subseq(alteredAAseq,1,6)
+        alteredAAseq <- subseq(alteredAAseq,1,min(6,length(alteredAAseq)))
       } else {
         alteredAAseq <- subseq(alteredAAseq,1,min(reverseDiff+3,length(alteredAAseq)))
       }
