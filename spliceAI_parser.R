@@ -258,6 +258,18 @@ find_exon_lost_gain <- function(transcript,DLDGposition,ALAGposition,refseqTab) 
 get_partial_SEQ <- function(transcript,consensusStart,consensusEnd,
                             partialStart,partialEnd,refseqTable,
                             frameshift,varPos,ref,alt,chrom=NULL) {
+  tryCatch(
+    get_partial_SEQ_impl(transcript,consensusStart,consensusEnd,partialStart,partialEnd,
+                         refseqTable,frameshift,varPos,ref,alt,chrom),
+    error = function(e) {
+      warning(sprintf("spliceAI_parser: get_partial_SEQ failed for transcript %s (varPos %s): %s; returning 'cannot determine'",
+                      transcript, varPos, conditionMessage(e)))
+      "cannot determine"
+    })
+}
+get_partial_SEQ_impl <- function(transcript,consensusStart,consensusEnd,
+                            partialStart,partialEnd,refseqTable,
+                            frameshift,varPos,ref,alt,chrom=NULL) {
   # correct the start site, from ucsc table format
   consensusStart = consensusStart+1
   consensusTable = make_consensus_table(transcript,refseqTable,filterNONCOD = TRUE,selChrom = chrom)
@@ -364,6 +376,18 @@ get_partial_SEQ <- function(transcript,consensusStart,consensusEnd,
 
 # Extract the changed amino acid sequence for exon skipping
 get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt,chrom=NULL){
+  # Catchall: specific guards inside *_impl handle known cases (with their own warnings);
+  # any unforeseen error degrades to 'cannot determine' with a loud warning naming the
+  # variant/transcript, rather than crashing the whole chunk.
+  tryCatch(
+    get_skip_SEQ_impl(exons,refseqTable,frameshift,transcript,varPos,ref,alt,chrom),
+    error = function(e) {
+      warning(sprintf("spliceAI_parser: get_skip_SEQ failed for transcript %s (varPos %s): %s; returning 'cannot determine'",
+                      transcript, varPos, conditionMessage(e)))
+      "cannot determine"
+    })
+}
+get_skip_SEQ_impl <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt,chrom=NULL){
   if (is.na(exons)) {
     return("lost site/s do not match consensus")
   }
@@ -433,6 +457,17 @@ get_skip_SEQ <- function(exons,refseqTable,frameshift,transcript,varPos,ref,alt,
 # Format the refseq table to reflect the pseudoexon activation impact
 get_pseudo_SEQ <- function(pseudoStart,pseudoEnd,refseqTable,frameshift,
                            transcript,varPos,ref,alt,chrom=NULL) {
+  tryCatch(
+    get_pseudo_SEQ_impl(pseudoStart,pseudoEnd,refseqTable,frameshift,
+                        transcript,varPos,ref,alt,chrom),
+    error = function(e) {
+      warning(sprintf("spliceAI_parser: get_pseudo_SEQ failed for transcript %s (varPos %s): %s; returning 'cannot determine'",
+                      transcript, varPos, conditionMessage(e)))
+      "cannot determine"
+    })
+}
+get_pseudo_SEQ_impl <- function(pseudoStart,pseudoEnd,refseqTable,frameshift,
+                           transcript,varPos,ref,alt,chrom=NULL) {
   if (is.na(pseudoStart) | is.na(pseudoEnd)) {
     return("gain site/s not intronic")
   }
@@ -484,6 +519,15 @@ get_pseudo_SEQ <- function(pseudoStart,pseudoEnd,refseqTable,frameshift,
 
 # Format the refseq table to reflect the intron retention impact
 get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,ref,alt,chrom=NULL) {
+  tryCatch(
+    get_retention_SEQ_impl(refseqTable,intron,frameshift,transcript,varPos,ref,alt,chrom),
+    error = function(e) {
+      warning(sprintf("spliceAI_parser: get_retention_SEQ failed for transcript %s (varPos %s): %s; returning 'cannot determine'",
+                      transcript, varPos, conditionMessage(e)))
+      "cannot determine"
+    })
+}
+get_retention_SEQ_impl <- function(refseqTable,intron,frameshift,transcript,varPos,ref,alt,chrom=NULL) {
   if (is.na(intron)) {
     return("lost site/s do not match consensus")
   }
@@ -547,6 +591,15 @@ get_retention_SEQ <- function(refseqTable,intron,frameshift,transcript,varPos,re
 
 # Extract the amino acid sequence for the relevant increased exon inclusion
 get_exon_inclusion_seq <- function(refseqTable,exon,transcript,frameshift,varPos,ref,alt,chrom=NULL) {
+  tryCatch(
+    get_exon_inclusion_seq_impl(refseqTable,exon,transcript,frameshift,varPos,ref,alt,chrom),
+    error = function(e) {
+      warning(sprintf("spliceAI_parser: get_exon_inclusion_seq failed for transcript %s (varPos %s): %s; returning 'cannot determine'",
+                      transcript, varPos, conditionMessage(e)))
+      "cannot determine"
+    })
+}
+get_exon_inclusion_seq_impl <- function(refseqTable,exon,transcript,frameshift,varPos,ref,alt,chrom=NULL) {
   # extract the consensus exon table
   consensusTAB = make_consensus_table(transcript,refseqTable,filterNONCOD=TRUE,selChrom = chrom)
   if (nrow(consensusTAB) == 0) {
